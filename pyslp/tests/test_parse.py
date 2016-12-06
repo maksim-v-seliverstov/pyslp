@@ -114,7 +114,6 @@ class TestMultiCast(unittest.TestCase):
 
     def test_parse_deregistration(self):
         data = b'\x02\x04\x00\x008\x00\x00\x00\x00\x00>\x0c\x00\x02en\x00\x07DEFAULT\x00\x00\x00\x00\x17service:test://test.com\x00\x00\x00'
-        b'\x02\x01\x00\x007@\x00\x00\x00\x00\xb2\x06\x00\x02en\x00\x07DEFAULT\x00\x00\x00\x00\x17service:test://test.com\x00\x00'
         header, url_entry, scope_list = parse.parse_deregistration(data)
         self.assertDictEqual(
             header, dict(

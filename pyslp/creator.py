@@ -109,5 +109,5 @@ def create_deregistration(url, scope_list='DEFAULT'):
     data += bytes([0])
     data += bytes([0])
 
-    header = create_header(function_id=4, data_length=len(data), ofr=64)
+    header = create_header(function_id=4, data_length=len(data), ofr=0)
     return header + data
