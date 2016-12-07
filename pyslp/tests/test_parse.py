@@ -14,7 +14,7 @@ class TestMultiCast(unittest.TestCase):
             header, dict(
                 version=2,
                 function_id=3,
-                xid=10953,
+                xid=21833,
                 length=82,
                 language_tag_length=2,
                 language_tag='en'
@@ -41,7 +41,7 @@ class TestMultiCast(unittest.TestCase):
             header, dict(
                 version=2,
                 function_id=1,
-                xid=620,
+                xid=9740,
                 length=42,
                 language_tag_length=2,
                 language_tag='en'
@@ -103,7 +103,7 @@ class TestMultiCast(unittest.TestCase):
             header, dict(
                 version=2,
                 function_id=7,
-                xid=19327,
+                xid=38527,
                 length=29,
                 language_tag_length=2,
                 language_tag='en'
@@ -119,7 +119,7 @@ class TestMultiCast(unittest.TestCase):
             header, dict(
                 version=2,
                 function_id=4,
-                xid=1004,
+                xid=15884,
                 length=56,
                 language_tag_length=2,
                 language_tag='en'

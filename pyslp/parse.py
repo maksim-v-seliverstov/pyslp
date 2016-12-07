@@ -2,10 +2,7 @@
 
 
 def convert_to_int(data):
-    s = '0b'
-    for b in data:
-        s += str(bin(b))[2:]
-    return int(s, 2)
+    return int.from_bytes(data, byteorder='big')
 
 
 def _parse(data, count):

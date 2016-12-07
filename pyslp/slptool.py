@@ -149,7 +149,7 @@ class SLPClient:
 if __name__ == '__main__':
     for _ in range(10):
         loop = asyncio.get_event_loop()
-        ip_addrs = '192.168.1.40'
+        ip_addrs = 'None'
         if ip_addrs is None:
             raise Exception('You should set ip address')
         slp_client = SLPClient(ip_addrs=ip_addrs)

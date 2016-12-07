@@ -13,6 +13,7 @@ class SLPDServer:
     def __init__(self):
         self.services = dict()
         self.url_entries = dict()
+        self.lifetime = dict()
 
         self.flag_continue = True
         self.transports = list()
@@ -24,81 +25,106 @@ class SLPDServer:
     def update(self):
         while self.flag_continue:
             urls = list()
-            for url in self.url_entries:
+            lifetime = copy.copy(self.lifetime)
+            for url in lifetime:
+                if lifetime[url] == 65535:
+                    continue
                 utc = datetime.strptime(self.url_entries[url]['local_ts'], "%Y-%m-%d %H:%M:%S.%f")
                 delta_utc = (datetime.utcnow() - utc).total_seconds()
-                if self.url_entries[url]['lifetime'] == 65535:
-                    continue
-                if delta_utc > self.url_entries[url]['lifetime']:
+                if delta_utc > lifetime[url]:
                     urls.append(url)
-
             for url in urls:
                 self.remove(url)
 
             yield from asyncio.sleep(0.5)
 
     def remove(self, url):
-        url_entries = copy.copy(self.url_entries)
-        service_type = url_entries[url]['service_type']
-        services = copy.copy(self.services)
-        for info in services[service_type]:
-            if info['url'] == url:
-                self.services[service_type].remove(info)
-                self.url_entries.pop(url, None)
-                break
+        service_type = self.url_entries[url]['service_type']
+        self.services[service_type].remove(url)
+        if not self.services[service_type]:
+            self.services.pop(service_type,  None)
+        self.lifetime.pop(url, None)
+        self.url_entries.pop(url, None)
 
     def datagram_received(self, data, addr):
-        response = None
-
         header, _ = parse.parse_header(data)
         if header['function_id'] == 3:
             response = creator.create_acknowledge(xid=header['xid'])
-            for transport in self.transports:
-                transport.sendto(response, addr)
 
             header, url_entries, msg = parse.parse_registration(data)
-            if msg['service_type'] in self.services:
-                self.services[msg['service_type']].append(url_entries)
-            else:
-                self.services[msg['service_type']] = [url_entries]
+            service_type = msg['service_type']
+            url = url_entries['url']
+            lifetime = url_entries['lifetime']
 
-            self.services[msg['service_type']] = [dict(t) for t in set([tuple(d.items()) for d in self.services[msg['service_type']]])]
-            self.url_entries[url_entries['url']] = dict(
+            if service_type in self.services:
+                self.services[service_type].update({url})
+                self.lifetime[url] = lifetime
+            else:
+                self.services[service_type] = {url}
+                self.lifetime[url] = lifetime
+
+            self.url_entries[url] = dict(
                 attr_list=msg['attr_list'],
                 local_ts=str(datetime.utcnow()),
-                lifetime=url_entries['lifetime'],
-                service_type=msg['service_type']
+                lifetime=lifetime,
+                service_type=service_type
             )
+
+            for transport in self.transports:
+                transport.sendto(response, addr)
 
         elif header['function_id'] == 1:
             header, msg = parse.parse_request(data)
-            if msg['service_type'] in self.services:
-                response = creator.create_reply(xid=header['xid'], url_entries=self.services[msg['service_type']])
-                for transport in self.transports:
-                    transport.sendto(response, addr)
-            else:
+            service_type = msg['service_type']
+
+            if service_type not in self.services:
                 response = creator.create_reply(xid=header['xid'], url_entries=[])
                 for transport in self.transports:
                     transport.sendto(response, addr)
+                return
+
+            urls = list(self.services[service_type])
+            url_entries = list()
+            for url in urls:
+                url_entries.append(
+                    dict(
+                        url=url,
+                        lifetime=self.lifetime[url]
+                    )
+                )
+
+            response = creator.create_reply(
+                xid=header['xid'],
+                url_entries=url_entries
+            )
+            for transport in self.transports:
+                transport.sendto(response, addr)
 
         elif header['function_id'] == 6:
             header, msg = parse.parse_attr_request(data)
-            if msg['url'] in self.url_entries:
-                response = creator.create_attr_reply(xid=header['xid'], attr_list=self.url_entries[msg['url']]['attr_list'])
-                for transport in self.transports:
-                    transport.sendto(response, addr)
+            url = msg['url']
 
-        elif header['function_id'] == 4:
-            # print('4', data)
-            header, url_entry, scope_list = parse.parse_deregistration(data)
-            response = creator.create_acknowledge(xid=header['xid'])
+            attr_list = ''
+            if url in self.url_entries:
+                attr_list = self.url_entries[url]['attr_list']
+
+            response = creator.create_attr_reply(
+                xid=header['xid'],
+                attr_list=attr_list
+            )
+
             for transport in self.transports:
                 transport.sendto(response, addr)
-            if url_entry['url'] in self.url_entries:
-                self.remove(url_entry['url'])
 
-        if response is None:
-            return
+        elif header['function_id'] == 4:
+            header, url_entry, scope_list = parse.parse_deregistration(data)
+            response = creator.create_acknowledge(xid=header['xid'])
+            url = url_entry['url']
+            if url not in self.url_entries:
+                return
+            self.remove(url)
+            for transport in self.transports:
+                transport.sendto(response, addr)
 
     def close(self):
         self.flag_continue = False
