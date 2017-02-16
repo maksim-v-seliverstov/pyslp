@@ -1,48 +1,59 @@
-Description
---------------
-Service Location Protocol, Version 2
-Usage
------
 Create slp server
+=================
+
 .. code-block:: python
-    import asyncio
+   :emphasize-lines: 1-3,5
 
-    from pyslp.slpd import create_slpd
+   import asyncio
 
-    loop = asyncio.get_event_loop()
-    ip_addrs = ['192.168.1.1']
-    loop.run_until_complete(create_slpd(ip_addrs))
-    loop.run_forever()
+   from pyslp.slpd import create_slpd
+
+
+   if __name__ == '__main__':
+       loop = asyncio.get_event_loop()
+       ip_addrs = ['127.0.0.1']
+       loop.run_until_complete(create_slpd(ip_addrs))
+       loop.run_forever()
 
 Usage slp client
+=================
+
 .. code-block:: python
-    loop = asyncio.get_event_loop()
-    ip_addrs = ['192.168.1.1']
-    slp_client = SLPClient(ip_addrs=ip_addrs)
-    service_type = 'service:test'
-    url = 'service:test://test.com'
+   :emphasize-lines: 1-3,5
 
-    loop.run_until_complete(
-        slp_client.register(
-            service_type=service_type,
-            lifetime=15,
-            url=url,
-            attr_list=''
-        )
-    )
-    print('{} - service is registered successfully'.format(url))
+   import asyncio
 
-    url_entries = loop.run_until_complete(
-        slp_client.findsrvs(service_type=service_type)
-    )
-    print('findsrvs for {} - {}'.format(service_type, url_entries))
+   from pyslp.slptool import SLPClient
 
-    attr_list = loop.run_until_complete(
-        slp_client.findattrs(url=url)
-    )
-    print('findattrs for {} - {}'.format(url, attr_list))
 
-    loop.run_until_complete(
-        slp_client.deregister(url=url)
-    )
-    print('{} - service is deregistered successfully'.format(url))
+   if __name__ == '__main__':
+       loop = asyncio.get_event_loop()
+       ip_addrs = ['127.0.0.1']
+       slp_client = SLPClient(ip_addrs=ip_addrs)
+       service_type = 'service:test'
+       url = 'service:test://test.com'
+
+       loop.run_until_complete(
+           slp_client.register(
+               service_type=service_type,
+               lifetime=15,
+               url=url,
+               attr_list=''
+           )
+       )
+       print('{} - service is registered successfully'.format(url))
+
+       url_entries = loop.run_until_complete(
+           slp_client.findsrvs(service_type=service_type)
+       )
+       print('findsrvs for {} - {}'.format(service_type, url_entries))
+
+       attr_list = loop.run_until_complete(
+           slp_client.findattrs(url=url)
+       )
+       print('findattrs for {} - {}'.format(url, attr_list))
+
+       loop.run_until_complete(
+           slp_client.deregister(url=url)
+       )
+       print('{} - service is deregistered successfully'.format(url))
