@@ -86,23 +86,41 @@ class SLPClient:
 
     @asyncio.coroutine
     def _wait(self, fs):
-        while True:
-            done, pending = yield from asyncio.wait(fs, timeout=5, return_when=FIRST_COMPLETED)
+        flag_completed = False
+
+        timeout = 10
+        while not flag_completed:
+            done, pending = yield from asyncio.wait(fs, timeout=timeout, return_when=FIRST_COMPLETED)
+
             if not done:
                 for f in pending:
                     f.cancel()
                 raise SLPClientError('Internal error')
 
             for f in done:
-                result = f.result()
-                error_code = result['error_code']
-                if error_code == 0:
-                    return result
+                try:
+                    result = f.result()
+                    error_code = result['error_code']
+                    if error_code == 0:
+                        flag_completed = True
+                        break
+                except:
+                    pass
 
-            if not pending:
-                raise SLPClientError('SLP error code: {}'.format(error_code))
-            else:
+            timeout //= 2
+
+            if flag_completed:
+                break
+
+            if pending:
                 fs = list(pending)
+            else:
+                try:
+                    result = done.pop().result()  # raise exception
+                except:
+                    raise SLPClientError('SLP error code: {}'.format(error_code))
+
+        return result
 
     def send(self, data):
         fs = list()
@@ -149,7 +167,7 @@ class SLPClient:
 if __name__ == '__main__':
     for _ in range(10):
         loop = asyncio.get_event_loop()
-        ip_addrs = 'None'
+        ip_addrs = '127.0.0.1'
         if ip_addrs is None:
             raise Exception('You should set ip address')
         slp_client = SLPClient(ip_addrs=ip_addrs)

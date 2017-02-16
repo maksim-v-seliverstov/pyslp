@@ -17,12 +17,13 @@ class SLPDServer:
 
         self.flag_continue = True
         self.transports = list()
+        self.ip_addrs = list()
 
     def connection_made(self, transport):
         self.transports.append(transport)
 
     @asyncio.coroutine
-    def update(self):
+    def update(self, ip_addrs=list(), mcast_port=None, mcast_group=None):
         while self.flag_continue:
             urls = list()
             lifetime = copy.copy(self.lifetime)
@@ -35,6 +36,13 @@ class SLPDServer:
                     urls.append(url)
             for url in urls:
                 self.remove(url)
+
+            for ip_addr in list(set(ip_addrs) - set(self.ip_addrs)):
+                yield from multicast.create_listener(
+                    lambda: Receiver(self),
+                    ip_addr, mcast_port, mcast_group
+                )
+                self.ip_addrs.append(ip_addr)
 
             yield from asyncio.sleep(0.5)
 
@@ -149,20 +157,20 @@ def create_slpd(ip_addrs, mcast_port=427, mcast_group='239.255.255.253', loop=No
     ip_addrs = get_lst(ip_addrs)
     slpd = SLPDServer()
     loop = loop or asyncio.get_event_loop()
-    asyncio.run_coroutine_threadsafe(slpd.update(), loop)
-    transports = list()
-    for ip_addr in ip_addrs:
-        t = yield from multicast.create_listener(
-            lambda: Receiver(slpd),
-            ip_addr, mcast_port, mcast_group
-        )
-        transports.append(t)
+    asyncio.run_coroutine_threadsafe(
+        slpd.update(
+            ip_addrs=ip_addrs,
+            mcast_port=mcast_port,
+            mcast_group=mcast_group
+        ),
+        loop
+    )
     return slpd
 
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    ip_addrs = None
+    ip_addrs = '127.0.0.1'
     if ip_addrs is None:
         raise Exception('You should set ip address')
     loop.run_until_complete(create_slpd(ip_addrs))
