@@ -12,7 +12,7 @@ class TestSLPD(unittest.TestCase):
     loop = asyncio.get_event_loop()
 
     def setUp(self):
-        self.ip_addr = '127.0.0.1'
+        self.ip_addr = ['127.0.0.1', '127.0.0.2']
         self.mcast_group = '239.255.255.253'
         self.mcast_port = 427
         self.service_type = 'service:seliverstov'
@@ -33,9 +33,10 @@ class TestSLPD(unittest.TestCase):
         self.assertSetEqual(set(urls), set(find_urls))
 
     def test_register_and_deregister(self):
+        self.loop.run_until_complete(asyncio.sleep(1))
         self.assertService(self.service_type, [])
         result = list()
-        urls = ['{}://test_{}.com'.format(self.service_type, i) for i in range(10)]
+        urls = ['{}://test_{}.com'.format(self.service_type, i) for i in range(1)]
         for url in urls:
             self.loop.run_until_complete(
                 self.slp_client.register(
@@ -58,6 +59,7 @@ class TestSLPD(unittest.TestCase):
         self.assertService(self.service_type, [])
 
     def test_findattrs(self):
+        self.loop.run_until_complete(asyncio.sleep(1))
         url = '{}://test.com'.format(self.service_type)
         attr_list = '(attr1=value1),(attr2=value2)'
         self.loop.run_until_complete(
