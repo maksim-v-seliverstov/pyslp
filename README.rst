@@ -2,7 +2,6 @@ Create slp server
 =================
 
 .. code-block:: python
-   :emphasize-lines: 1-3,5
 
    import asyncio
 
@@ -19,7 +18,6 @@ Usage slp client
 =================
 
 .. code-block:: python
-   :emphasize-lines: 1-3,5
 
    import asyncio
 
