@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
-from concurrent.futures import FIRST_COMPLETED
+from concurrent.futures import FIRST_COMPLETED, ALL_COMPLETED
 
 from pyslp.utils import get_lst
 from pyslp import multicast, creator, parse
@@ -51,10 +51,11 @@ class Receiver(asyncio.DatagramProtocol):
 
 class SLPClient:
 
-    def __init__(self, ip_addrs, mcast_group='239.255.255.253', mcast_port=427, loop=None):
+    def __init__(self, ip_addrs, mcast_group='239.255.255.253', mcast_port=427, loop=None, scope='DEFAULT'):
         self.ip_addrs = get_lst(ip_addrs)
         self.mcast_group = mcast_group
         self.mcast_port = mcast_port
+        self.scope = scope
 
         self.loop = loop or asyncio.get_event_loop()
 
@@ -64,15 +65,14 @@ class SLPClient:
             asyncio.DatagramProtocol, ip_addr, 0
         )
         try:
-            mcast_transport.sendto(data, (self.mcast_group, self.mcast_port))
-
             event = asyncio.Event()
             result = dict()
             transport, _ = yield from self.loop.create_datagram_endpoint(
                 lambda: Receiver(event, result), sock=mcast_transport._sock
             )
+            mcast_transport.sendto(data, (self.mcast_group, self.mcast_port))
             try:
-                done, pending = yield from asyncio.wait([event.wait()], timeout=5, return_when=FIRST_COMPLETED)
+                done, pending = yield from asyncio.wait([event.wait()], timeout=1, return_when=FIRST_COMPLETED)
                 for f in pending:
                     f.cancel()
                 if not (done or result):
@@ -88,9 +88,9 @@ class SLPClient:
     def _wait(self, fs):
         flag_completed = False
 
-        timeout = 10
+        timeout = 5
         while not flag_completed:
-            done, pending = yield from asyncio.wait(fs, timeout=timeout, return_when=FIRST_COMPLETED)
+            done, pending = yield from asyncio.wait(fs, timeout=timeout, return_when=ALL_COMPLETED)
 
             if not done:
                 for f in pending:
@@ -107,7 +107,7 @@ class SLPClient:
                 except:
                     pass
 
-            timeout //= 2
+            timeout /= 2
 
             if flag_completed:
                 break
@@ -117,23 +117,28 @@ class SLPClient:
             else:
                 try:
                     result = done.pop().result()  # raise exception
+                    if not pending:
+                        raise SLPClientError('SLP error code: {}'.format(error_code))
                 except:
                     raise SLPClientError('SLP error code: {}'.format(error_code))
 
         return result
 
-    def send(self, data):
+    def send(self, data, ip_addr=None):
         fs = list()
-        for ip_addr in self.ip_addrs:
+        if ip_addr is not None:
             fs.append(self._send(ip_addr, data))
+        else:
+            for ip_addr in self.ip_addrs:
+                fs.append(self._send(ip_addr, data))
 
         return (yield from self._wait(fs))
 
     @asyncio.coroutine
-    def register(self, service_type, url, scope_list='DEFAULT', attr_list='', lifetime=65535):
+    def register(self, service_type, url, attr_list='', lifetime=65535):
         data = creator.create_registration(
             service_type=service_type,
-            scope_list=scope_list,
+            scope_list=self.scope,
             attr_list=attr_list,
             lifetime=lifetime,
             url=url
@@ -142,27 +147,54 @@ class SLPClient:
 
     @asyncio.coroutine
     def deregister(self, url):
-        data = creator.create_deregistration(url=url)
+        data = creator.create_deregistration(url=url, scope_list=self.scope)
         yield from self.send(data)
 
     @asyncio.coroutine
-    def findsrvs(self, service_type, scope_list='DEFAULT'):
+    def findsrvs(self, service_type):
         data = creator.create_request(
             service_type=service_type,
-            scope_list=scope_list
+            scope_list=self.scope
         )
-        result = yield from self.send(data)
-        return [entry['url'] for entry in result['url_entries']]
+        url_entries = list()
+
+        addrs = list()
+        for ip_addr in self.ip_addrs:
+            try:
+                result = yield from self.send(data, ip_addr)
+            except:
+                continue
+            url_entries.append([entry['url'] for entry in result['url_entries']])
+            addrs.append(ip_addr)
+        if not url_entries:
+            raise SLPClientError('Internal error')
+        return url_entries, addrs
 
     @asyncio.coroutine
-    def findattrs(self, url, scope_list='DEFAULT'):
+    def findattrs(self, url, ip_addrs=None):
         data = creator.create_attr_request(
             url=url,
-            scope_list=scope_list
+            scope_list=self.scope
         )
-        result = yield from self.send(data)
-        return result['attr_list']
+        if ip_addrs is None:
+            addrs = self.ip_addrs
+        else:
+            addrs = ip_addrs
 
+        flag_error = False
+
+        for ip_addr in addrs:
+            try:
+                result = yield from self.send(data, ip_addr)
+                if result['attr_list'] != '':
+                    return result['attr_list']
+            except:
+                flag_error = True
+
+        if flag_error:
+            raise SLPClientError('Internal erro: {}'.format(ip_addrs))
+
+        return list()
 
 if __name__ == '__main__':
     for _ in range(10):
@@ -187,12 +219,13 @@ if __name__ == '__main__':
         )
         print(url_entries)
         print('findsrvs for {} - {}'.format(service_type, url_entries))
-        for url in url_entries:
-            attr_list = loop.run_until_complete(
-                slp_client.findattrs(url=url)
-            )
-            print('findattrs for {} - {}'.format(url, attr_list))
-            loop.run_until_complete(
-                slp_client.deregister(url=url)
-            )
-            print('{} - service is deregistered successfully'.format(url))
+        for _url_entries in url_entries[0]:
+            for url in _url_entries:
+                attr_list = loop.run_until_complete(
+                    slp_client.findattrs(url=url)
+                )
+                print('findattrs for {} - {}'.format(url, attr_list))
+                loop.run_until_complete(
+                    slp_client.deregister(url=url)
+                )
+                print('{} - service is deregistered successfully'.format(url))

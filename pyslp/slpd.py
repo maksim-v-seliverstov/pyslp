@@ -10,7 +10,7 @@ from pyslp import parse, creator, multicast
 
 class SLPDServer:
 
-    def __init__(self):
+    def __init__(self, scope='DEFAULT'):
         self.services = dict()
         self.url_entries = dict()
         self.lifetime = dict()
@@ -18,6 +18,8 @@ class SLPDServer:
         self.flag_continue = True
         self.transports = list()
         self.ip_addrs = list()
+
+        self.scope = scope
 
     def connection_made(self, transport):
         self.transports.append(transport)
@@ -65,6 +67,10 @@ class SLPDServer:
             response = creator.create_acknowledge(xid=header['xid'])
 
             header, url_entries, msg = parse.parse_registration(data)
+
+            if msg['scope_list'] != self.scope:
+                return
+
             service_type = msg['service_type']
             url = url_entries['url']
             lifetime = url_entries['lifetime']
@@ -87,6 +93,10 @@ class SLPDServer:
 
         elif header['function_id'] == 1:
             header, msg = parse.parse_request(data)
+
+            if msg['scope_list'] != self.scope:
+                return
+
             service_type = msg['service_type']
 
             if service_type not in self.services[interface]:
@@ -112,6 +122,10 @@ class SLPDServer:
 
         elif header['function_id'] == 6:
             header, msg = parse.parse_attr_request(data)
+
+            if msg['scope_list'] != self.scope:
+                return
+
             url = msg['url']
 
             attr_list = ''
@@ -127,9 +141,14 @@ class SLPDServer:
 
         elif header['function_id'] == 4:
             header, url_entry, scope_list = parse.parse_deregistration(data)
+
+            if scope_list != self.scope:
+                return
+
             response = creator.create_acknowledge(xid=header['xid'])
             url = url_entry['url']
             if url not in self.url_entries[interface]:
+                transport.sendto(response, addr)
                 return
             self.remove(interface, url)
             transport.sendto(response, addr)
@@ -156,9 +175,9 @@ class Receiver(asyncio.DatagramProtocol):
 
 
 @asyncio.coroutine
-def create_slpd(ip_addrs, mcast_port=427, mcast_group='239.255.255.253', loop=None):
+def create_slpd(ip_addrs, mcast_port=427, mcast_group='239.255.255.253', loop=None, scope='DEFAULT'):
     ip_addrs = get_lst(ip_addrs)
-    slpd = SLPDServer()
+    slpd = SLPDServer(scope=scope)
     loop = loop or asyncio.get_event_loop()
     asyncio.run_coroutine_threadsafe(
         slpd.update(

@@ -30,13 +30,13 @@ class TestSLPD(unittest.TestCase):
         find_urls = self.loop.run_until_complete(
             self.slp_client.findsrvs(service_type=service_type)
         )
-        self.assertSetEqual(set(urls), set(find_urls))
+        self.assertSetEqual(set(urls), set(find_urls[0][0]))
 
     def test_register_and_deregister(self):
         self.loop.run_until_complete(asyncio.sleep(1))
         self.assertService(self.service_type, [])
         result = list()
-        urls = ['{}://test_{}.com'.format(self.service_type, i) for i in range(1)]
+        urls = ['{}://test_{}.com'.format(self.service_type, i) for i in range(3)]
         for url in urls:
             self.loop.run_until_complete(
                 self.slp_client.register(
