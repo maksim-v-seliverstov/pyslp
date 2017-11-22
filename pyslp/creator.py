@@ -84,7 +84,7 @@ def create_attr_request(url, scope_list='DEFAULT'):
         data += value_length
         data += value.encode()
 
-    header = create_header(function_id=6, data_length=len(data), ofr=64)
+    header = create_header(function_id=6, data_length=len(data), ofr=62)
     return header + data
 
 
